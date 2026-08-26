@@ -1,0 +1,304 @@
+=====================================================
+STEP 1 — BBS / SCHEDULE TABLE ROW-WISE EXTRACTION
+=====================================================
+
+The BBS / Schedule Data Table MUST be extracted ROW BY ROW.
+
+CRITICAL RULE:
+
+ONE DATA ROW IN THE SCHEDULE TABLE = ONE BAR OBJECT IN THE OUTPUT.
+
+Do not extract the table column-wise.
+
+Do not collect all bar marks separately, all diameters separately, etc.
+
+Instead, read each complete row horizontally and create one JSON object
+containing all values belonging to that specific row.
+
+-----------------------------------------------------
+ROW-WISE EXTRACTION PROCESS
+-----------------------------------------------------
+
+For each data row:
+
+1. Identify the row boundaries.
+2. Start from the left-most data column.
+3. Read every cell in that SAME row from left to right.
+4. Map each cell value to its corresponding column header.
+5. Create exactly ONE bar object for that row.
+6. Move to the next row and repeat.
+7. Never merge data from different rows.
+
+Example schedule:
+
+| BAR MARK | DIA | QTY | CUTTING LENGTH | A   | B   | TOTAL WEIGHT |
+|----------|-----|-----|----------------|-----|-----|--------------|
+| B1       | 8   | 10  | 1200           | 200 | 500 | 4.75         |
+| B2       | 10  | 15  | 1500           | 300 | 600 | 13.87        |
+| B3       | 12  | 8   | 2000           | 400 | 700 | 14.21        |
+
+Output:
+
+{
+  "bars": [
+    {
+      "bar_mark_position": "B1",
+      "diameter": "8",
+      "number_qty": 10,
+      "cutting_length": 1200,
+      "dimensions": {
+        "A": 200,
+        "B": 500
+      },
+      "total_weight": 4.75
+    },
+    {
+      "bar_mark_position": "B2",
+      "diameter": "10",
+      "number_qty": 15,
+      "cutting_length": 1500,
+      "dimensions": {
+        "A": 300,
+        "B": 600
+      },
+      "total_weight": 13.87
+    },
+    {
+      "bar_mark_position": "B3",
+      "diameter": "12",
+      "number_qty": 8,
+      "cutting_length": 2000,
+      "dimensions": {
+        "A": 400,
+        "B": 700
+      },
+      "total_weight": 14.21
+    }
+  ]
+}
+
+=====================================================
+ROW ISOLATION — CRITICAL
+=====================================================
+
+Every schedule row is completely independent.
+
+NEVER:
+
+- Copy a diameter from the row above.
+- Copy a quantity from the row below.
+- Merge dimensions from multiple rows.
+- Assign a value to the wrong bar mark.
+- Shift values left or right into another column.
+- Combine two rows into one object.
+- Split one row into multiple objects unless the table explicitly
+  represents multiple independent bar entries.
+
+Each output object must contain data ONLY from its corresponding
+schedule row.
+
+Example:
+
+Row 1:
+B1 | 8 | 10 | 1200
+
+Row 2:
+B2 | 10 | 15 | 1500
+
+CORRECT:
+
+{
+  "bars": [
+    {
+      "bar_mark_position": "B1",
+      "diameter": "8",
+      "number_qty": 10,
+      "cutting_length": 1200
+    },
+    {
+      "bar_mark_position": "B2",
+      "diameter": "10",
+      "number_qty": 15,
+      "cutting_length": 1500
+    }
+  ]
+}
+
+WRONG:
+
+{
+  "bar_marks": ["B1", "B2"],
+  "diameters": ["8", "10"],
+  "quantities": [10, 15]
+}
+
+Do NOT return column-wise arrays.
+
+=====================================================
+FIELD EXTRACTION FOR EACH ROW
+=====================================================
+
+For every schedule data row, extract values corresponding to these
+column headers when present:
+
+BAR MARK / POSITION
+→ bar_mark_position
+
+DIAMETER / DIA / Ø
+→ diameter
+
+NUMBER / QTY / NOS / NUMBER-QTY
+→ number_qty
+
+GRADE OF STEEL / CLASS
+→ grade_of_steel_class
+
+LENGTH / BAR CUTTING LENGTH / CUTTING LENGTH
+→ cutting_length
+
+TOTAL BAR LENGTH / TOTAL LENGTH
+→ total_bar_length
+
+RIGID SHAPE / BENDING DETAILS / SHAPE
+→ bending_details
+
+KG / UNIT / UNIT WEIGHT
+→ kg_per_unit
+
+WEIGHT
+→ weight
+
+TOTAL WEIGHT
+→ total_weight
+
+
+=====================================================
+DYNAMIC DIMENSION COLUMNS — ROW-WISE
+=====================================================
+
+The schedule may contain dimension columns such as:
+
+A, B, C, C1, C2, C3,
+D, D1, D2, D3,
+E, E1, E2,
+F, G, H
+
+Extract ALL dimension columns that exist in the schedule.
+
+For each row, the dimension values MUST belong only to that row.
+
+Example:
+
+| BAR | A   | B   | C1  | C2  |
+|-----|-----|-----|-----|-----|
+| B1  | 200 | 500 | 100 | 150 |
+| B2  | 300 | 600 | 120 | 180 |
+
+Output:
+
+{
+  "bars": [
+    {
+      "bar_mark_position": "B1",
+      "dimensions": {
+        "A": 200,
+        "B": 500,
+        "C1": 100,
+        "C2": 150
+      }
+    },
+    {
+      "bar_mark_position": "B2",
+      "dimensions": {
+        "A": 300,
+        "B": 600,
+        "C1": 120,
+        "C2": 180
+      }
+    }
+  ]
+}
+
+Never take:
+
+A = 200 from B1
+
+and combine it with:
+
+B = 600 from B2.
+
+That is incorrect.
+
+=====================================================
+EMPTY CELLS
+=====================================================
+
+If a column exists but the cell in the CURRENT ROW is empty:
+
+Return null for that field.
+
+Example:
+
+| BAR | DIA | QTY | A   | B |
+|-----|-----|-----|-----|---|
+| B1  | 8   | 10  | 200 |   |
+
+Output:
+
+{
+  "bar_mark_position": "B1",
+  "diameter": "8",
+  "number_qty": 10,
+  "dimensions": {
+    "A": 200,
+    "B": null
+  }
+}
+
+Do NOT copy B from another row.
+
+=====================================================
+MULTIPLE BBS TABLES
+=====================================================
+
+If multiple BBS / Schedule Data Tables exist on the same page:
+
+1. Process each table separately.
+2. Extract every data row from each table.
+3. Preserve the top-to-bottom table order.
+4. Preserve the row order within each table.
+5. Append each valid row as a separate object in the "bars" array.
+
+Final order:
+
+Table 1 → Row 1
+Table 1 → Row 2
+Table 1 → Row 3
+Table 2 → Row 1
+Table 2 → Row 2
+
+=====================================================
+FINAL CRITICAL RULE
+=====================================================
+
+THE OUTPUT MUST MAINTAIN A 1:1 RELATIONSHIP BETWEEN
+SCHEDULE DATA ROWS AND OUTPUT BAR OBJECTS.
+
+If the schedule has:
+
+10 valid data rows
+
+the output MUST contain:
+
+10 bar objects.
+
+Each bar object represents exactly one schedule row.
+
+Do not skip valid rows.
+Do not duplicate rows.
+Do not merge rows.
+Do not create column-wise arrays.
+Do not copy values between rows.
+
+Read each row horizontally, map every cell to its column header,
+and create one complete JSON object before moving to the next row.

@@ -1,0 +1,5 @@
+crop the images of each
+bending details from the table
+make sure that it should save each and every shape of the bending and also extract some data's like bar mark's
+
+like bar_mark: image of bending detail
