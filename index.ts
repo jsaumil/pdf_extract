@@ -50,11 +50,11 @@ for (const page of pages) {
   const result = await cropper(page, cropsDir, CROP_PROMPT);
   results.push(result);
 }
-const finalResult = mergeExtractionResults(results);
+// const finalResult = mergeExtractionResults(results);
 
 // console.log(JSON.stringify(finalResult, null, 2));
 const output = {
-  extractions: finalResult,
+  extractions: results,
 };
 const resultPath = path.join(outputDir, "result.json");
 fs.writeFileSync(resultPath, JSON.stringify(output, null, 2));

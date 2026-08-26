@@ -15,7 +15,7 @@ import { normalizeCoords } from "./utils/normalizeCoords";
 let maxCropCalls = 40;
 
 interface CellCrop {
-  footing_name: string;
+  column_name: string;
   cellType: "header" | "row_label" | "data"; // header=top, row_label=left, data=middle
   x1: number;
   y1: number;
@@ -26,8 +26,8 @@ interface CellCrop {
 
 /** Result of table cropping */
 export interface TableCropResult {
-  // imagePath: string;
-  // cells: CellCrop[];
+  imagePath: string;
+  cells: CellCrop[];
   cropPaths: Record<string, string>; // label -> saved path
 }
 
@@ -43,7 +43,7 @@ export async function cropper(
 
   // ─── Tool: Crop a specific cell region ───
   const cropCellTool = tool(
-    async ({ footing_name, cellType, x1, y1, x2, y2, label }) => {
+    async ({ column_name, cellType, x1, y1, x2, y2, label }) => {
       const normalized = await normalizeCoords(x1, y1, x2, y2, imagePath);
       const image = await readFile(imagePath);
 
@@ -62,7 +62,7 @@ export async function cropper(
       await fs.promises.writeFile(cropPath, cropped);
 
       const cell: CellCrop = {
-        footing_name,
+        column_name,
         cellType,
         x1: normalized.x1,
         y1: normalized.y1,
@@ -73,7 +73,7 @@ export async function cropper(
       cells.push(cell);
       cropPaths[label] = cropPath;
 
-      return `OK — Saved ${cellType} [footing_name=${footing_name}] "${label}" → ${fileName} (${cells.length} total cropped so far)`;
+      return `OK — Saved ${cellType} [footing_name=${column_name}] "${label}" → ${fileName} (${cells.length} total cropped so far)`;
     },
     {
       name: "crop_cell",
@@ -195,8 +195,8 @@ export async function cropper(
   );
 
   return {
-    // imagePath,
-    // cells,
+    imagePath,
+    cells,
     cropPaths,
   };
 }
