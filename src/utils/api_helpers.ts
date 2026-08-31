@@ -39,19 +39,21 @@ export async function withRetry<T>(
     } catch (err: any) {
       lastError = err;
       const msg = err.message ?? "";
+      console.warn(`  ${label} attempt ${attempt}/${maxRetries} error: ${msg.slice(0, 200)}`);
+
       const isRetryable =
         msg.includes("ECONNRESET") ||
         msg.includes("socket") ||
         msg.includes("fetch failed") ||
         msg.includes("timeout") ||
         msg.includes("503") ||
-        msg.includes("429");
+        msg.includes("429") ||
+        msg.includes("choices") ||
+        msg.includes("undefined");
 
       if (attempt < maxRetries && isRetryable) {
         const delay = BACKOFF_MS * attempt;
-        console.warn(
-          `  ${label} attempt ${attempt}/${maxRetries} failed (${msg.slice(0, 80)}). Retrying in ${delay / 1000}s...`,
-        );
+        console.warn(`  Retrying in ${delay / 1000}s...`);
         await new Promise((r) => setTimeout(r, delay));
         continue;
       }

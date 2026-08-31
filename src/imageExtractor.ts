@@ -34,8 +34,7 @@ export interface TableCropResult {
 export async function cropper(
   imagePath: string,
   outputDir: string,
-  prompt: string,
-  tracker?: TokenTracker,
+  prompt: string
 ): Promise<TableCropResult> {
   const b64 = await compressImage(imagePath);
   const cells: CellCrop[] = [];
@@ -101,12 +100,12 @@ export async function cropper(
         totalRows: z
           .number()
           .int()
-          .min(1)
+          .min(0)
           .describe("Total rows including header"),
         totalCols: z
           .number()
           .int()
-          .min(1)
+          .min(0)
           .describe("Total columns including row label column"),
         notes: z
           .string()
@@ -133,11 +132,6 @@ export async function cropper(
     () => model.invoke([message]),
     "Table cropper init",
   );
-
-  // tracker
-  if (tracker) {
-    tracker.addRecord("cropper_init", tracker.extractUsage(response));
-  }
 
   let totalCalls = 0;
 
@@ -177,15 +171,6 @@ export async function cropper(
       () => model.invoke([message, response, ...toolResults]),
       `Table cropper turn ${totalCalls}`,
     );
-
-    // Tracker each loop iteration
-    if (tracker) {
-      tracker.addRecord(
-        "cropper_loop",
-        tracker.extractUsage(response),
-        totalCalls,
-      );
-    }
   }
 
   console.log(`\n── Table cropping complete ──`);

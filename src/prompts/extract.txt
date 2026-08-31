@@ -1,0 +1,540 @@
+```ts
+export const extractionPrompt = `
+=====================================================
+STRUCTURAL DRAWING DATA EXTRACTION
+=====================================================
+
+You are extracting structured data from a structural engineering drawing.
+
+The drawing may contain THREE independent data sections:
+
+1. INFORMATION TABLE
+2. BAR / BBS / REINFORCEMENT SCHEDULE TABLE
+3. PLATE TABLE
+
+You MUST identify these sections independently and extract all available data.
+
+NEVER mix data between these sections.
+
+
+=====================================================
+GLOBAL SOURCE PRIORITY
+=====================================================
+
+For every value, use the following source priority:
+
+1. The corresponding schedule/table
+2. Drawing annotation directly associated with that item
+3. Detail/bending drawing
+4. Calculation or visual inference
+
+A schedule/table is the AUTHORITATIVE SOURCE for information that it explicitly contains.
+
+If the same value appears both in a table and elsewhere in the drawing:
+
+    ALWAYS use the TABLE VALUE.
+
+DO NOT:
+- calculate a value that is explicitly given in a table
+- infer a value that is explicitly given in a table
+- visually estimate a value that is explicitly given in a table
+- copy a value from another row
+- use a drawing value instead of an available table value
+
+Only use drawing/detail information when the required information is NOT available in the corresponding table.
+
+
+=====================================================
+SECTION 1 — INFORMATION TABLE
+=====================================================
+
+The information table is usually located in the title block,
+drawing header, or bottom-right area.
+
+Extract the following fields when present:
+
+PROJECT NAME          → project_name
+STRUCTURE CONSULTANT  → structure_consultant
+DRAWING NUMBER        → drawing_no
+DATE                  → date
+REVISION / REV        → rev
+ELEMENT NAME          → element_name
+ELEMENT NUMBER        → element_number
+
+RULES:
+
+- Extract values exactly as written.
+- Do not paraphrase.
+- If a field is missing or unreadable, return null.
+- Do not infer missing metadata.
+- element_number must only be extracted when explicitly shown.
+- Do not calculate element_number from the drawing.
+
+
+=====================================================
+SECTION 2 — BAR / BBS / REINFORCEMENT SCHEDULE
+=====================================================
+
+This section contains reinforcement/bar information.
+
+Possible table names include:
+
+- BAR SCHEDULE
+- BAR BENDING SCHEDULE
+- BBS
+- REBAR SCHEDULE
+- REINFORCEMENT SCHEDULE
+- COLUMN SCHEDULE
+- BEAM SCHEDULE
+- FOOTING SCHEDULE
+- SLAB SCHEDULE
+- SCHEDULE
+
+A table containing bar marks/positions together with diameter,
+quantity, length, or reinforcement dimensions should be treated
+as a BAR/BBS table.
+
+
+-----------------------------------------------------
+CRITICAL ROW RULE
+-----------------------------------------------------
+
+ONE VALID DATA ROW = ONE BAR OBJECT.
+
+Read the table HORIZONTALLY, row by row.
+
+For every row:
+
+1. Identify the complete row boundary.
+2. Identify the column headers.
+3. Read every cell belonging to that row.
+4. Map each cell to its corresponding header.
+5. Create exactly ONE bar object.
+6. Only then move to the next row.
+
+NEVER extract the table column-by-column.
+
+NEVER combine values from different rows.
+
+Every value in a bar object MUST belong to the SAME physical table row.
+
+
+-----------------------------------------------------
+ROW ISOLATION
+-----------------------------------------------------
+
+Each table row is completely independent.
+
+NEVER:
+
+- copy a diameter from the previous row
+- copy a quantity from the next row
+- copy dimensions from another row
+- shift values into neighboring columns
+- merge two rows
+- split one row into multiple objects unless the table explicitly defines separate entries
+- assign a value to a different bar mark
+- fill an empty cell using a value from another row
+
+If a cell is empty in the current row:
+
+    RETURN NULL.
+
+Do NOT propagate values vertically from adjacent rows.
+
+
+-----------------------------------------------------
+BAR FIELD MAPPING
+-----------------------------------------------------
+
+BAR MARK / POSITION / MARK / REFERENCE
+→ bar_mark_position
+
+DIAMETER / DIA / Ø / BAR SIZE
+→ diameter
+
+NUMBER / QTY / NOS / NO. / NUMBER-QTY
+→ number_qty
+
+GRADE OF STEEL / GRADE / CLASS
+→ grade_of_steel_class
+
+LENGTH / BAR LENGTH / CUTTING LENGTH / BAR CUTTING LENGTH
+→ cutting_length
+
+TOTAL LENGTH / TOTAL BAR LENGTH
+→ total_bar_length
+
+RIGID SHAPE / SHAPE / BENDING DETAILS
+→ bending_details
+
+KG / UNIT / UNIT WEIGHT
+→ kg_per_unit
+
+WEIGHT / BAR WEIGHT
+→ weight
+
+TOTAL WEIGHT
+→ total_weight
+
+
+-----------------------------------------------------
+BAR TABLE VALUE PRIORITY
+-----------------------------------------------------
+
+For the following fields:
+
+bar_mark_position
+diameter
+number_qty
+grade_of_steel_class
+cutting_length
+total_bar_length
+kg_per_unit
+weight
+total_weight
+
+ALWAYS extract the value from the BAR/BBS TABLE when available.
+
+Examples:
+
+If the table says:
+
+Qty = 12
+
+DO NOT count the bars visually.
+
+If the table says:
+
+Cutting Length = 4500
+
+DO NOT calculate it from A, B, C dimensions.
+
+If the table says:
+
+Total Length = 54000
+
+DO NOT calculate Qty × Cutting Length.
+
+If the table says:
+
+Total Weight = 125.5
+
+DO NOT calculate the weight from diameter and length.
+
+
+=====================================================
+DYNAMIC BENDING DIMENSIONS
+=====================================================
+
+The bar table may contain dynamic dimension columns.
+
+Possible dimensions include:
+
+A, B, C, C1, C2, C3,
+D, D1, D2, D3,
+E, E1, E2,
+F, G, H
+
+Extract EVERY dimension column that actually exists in the BAR/BBS TABLE.
+
+For each row:
+
+    dimensions MUST contain only values from that SAME ROW.
+
+Example:
+
+| BAR | A   | B   | C1  | C2  |
+|-----|-----|-----|-----|-----|
+| B1  | 200 | 500 | 100 | 150 |
+| B2  | 300 | 600 | 120 | 180 |
+
+Correct:
+
+B1 → A=200, B=500, C1=100, C2=150
+
+B2 → A=300, B=600, C1=120, C2=180
+
+Incorrect:
+
+B1 → A=200, B=600
+
+NEVER mix dimensions between rows.
+
+
+-----------------------------------------------------
+BENDING DRAWING
+-----------------------------------------------------
+
+Use the bending/detail drawing ONLY when a required bending dimension
+is NOT available in the BAR/BBS TABLE.
+
+The bending drawing may be used for:
+
+A, B, C, C1, C2, D, D1, D2, D3, etc.
+
+However:
+
+If a dimension is explicitly available in the bar table,
+the BAR TABLE VALUE takes precedence.
+
+Do NOT replace a table value with a dimension measured,
+calculated, or inferred from the drawing.
+
+
+=====================================================
+MULTIPLE BAR TABLES
+=====================================================
+
+If multiple BAR/BBS tables exist:
+
+1. Identify each table independently.
+2. Process tables from top to bottom.
+3. Process rows within each table from top to bottom.
+4. Create one object for every valid data row.
+5. Append all objects to the "columns" array.
+
+Maintain this order:
+
+Table 1 → Row 1
+Table 1 → Row 2
+Table 2 → Row 1
+Table 2 → Row 2
+
+Do NOT merge rows simply because they have the same headers
+or similar values.
+
+
+=====================================================
+SECTION 3 — PLATE TABLE
+=====================================================
+
+The PLATE TABLE is completely separate from the BAR/BBS TABLE.
+
+Possible names include:
+
+- PLATE TABLE
+- PLATE SCHEDULE
+- PLATE LIST
+- GUSSET PLATE TABLE
+- GUSSET PLATE SCHEDULE
+- STIFFENER TABLE
+- STIFFENER SCHEDULE
+
+A plate table typically contains information such as:
+
+PLATE NAME
+PLATE PROFILE
+REPETITION / QTY
+WEIGHT
+DIA OF LUG
+TOTAL LENGTH OF LUG
+TOTAL WEIGHT OF LUG
+
+
+-----------------------------------------------------
+PLATE IDENTIFICATION
+-----------------------------------------------------
+
+A table should be treated as a PLATE TABLE when its rows primarily
+describe plates rather than reinforcement bars.
+
+Typical plate identifiers:
+
+P1
+P2
+PL1
+PL2
+GP1
+GP2
+
+Typical plate profiles:
+
+12x200x2
+10x150x300
+12x200x300
+
+The presence of plate profiles and/or lug information is a strong
+indicator that the table is a PLATE TABLE.
+
+
+-----------------------------------------------------
+PLATE ROW RULE
+-----------------------------------------------------
+
+ONE VALID PLATE TABLE ROW = ONE PLATE OBJECT.
+
+Read each plate row horizontally.
+
+For every row:
+
+1. Identify the row boundary.
+2. Identify the column headers.
+3. Read all cells in that row.
+4. Map values to the correct headers.
+5. Create exactly ONE plate object.
+6. Move to the next row.
+
+NEVER mix values from different plate rows.
+
+
+-----------------------------------------------------
+PLATE FIELD MAPPING
+-----------------------------------------------------
+
+PLATE NAME / MARK / POSITION / REFERENCE
+→ plate_name
+
+PLATE REPETITION / QTY / QUANTITY / NOS / NO.
+→ plate_repetation
+
+PLATE PROFILE / PROFILE / SIZE / PLATE SIZE / DIMENSIONS
+→ plate_profile
+
+WEIGHT / WT. / PLATE WEIGHT
+→ weigth
+
+DIA OF LUG / LUG DIA / LUG DIAMETER / LUG Ø
+→ dia_of_lug
+
+TOTAL LENGTH OF LUG / LUG LENGTH
+→ total_length_of_lug
+
+TOTAL WEIGHT OF LUG / LUG WEIGHT / LUG WT.
+→ total_weight_of_lug
+
+
+-----------------------------------------------------
+PLATE TABLE PRIORITY
+-----------------------------------------------------
+
+For every plate field:
+
+    If the value exists in the PLATE TABLE,
+    ALWAYS use the PLATE TABLE VALUE.
+
+DO NOT:
+
+- count plates visually when repetition/quantity is provided
+- calculate plate weight when weight is provided
+- calculate lug weight when lug weight is provided
+- calculate lug length when lug length is provided
+- estimate plate dimensions from the drawing when the profile is provided
+
+
+-----------------------------------------------------
+PLATE DETAIL FALLBACK
+-----------------------------------------------------
+
+Only use the plate detail drawing when a required field is NOT
+available in the PLATE TABLE.
+
+For example:
+
+If dia_of_lug is missing from the plate table but is explicitly
+shown in the associated lug detail, extract it from the detail.
+
+If total_length_of_lug is missing from the plate table but is
+explicitly shown in the associated detail, extract it from the detail.
+
+Do NOT override a table value with a drawing value.
+
+
+=====================================================
+TABLE CLASSIFICATION
+=====================================================
+
+INFORMATION TABLE:
+
+Contains project/drawing metadata such as:
+
+- Project Name
+- Consultant
+- Drawing Number
+- Date
+- Revision
+- Element Name
+
+→ Store in top-level information fields.
+
+
+BAR / BBS TABLE:
+
+Contains:
+
+- Bar Mark / Position
+- Diameter
+- Quantity
+- Cutting Length
+- Bar Dimensions
+- Weight
+- Reinforcement information
+
+→ Store in "columns".
+
+
+PLATE TABLE:
+
+Contains:
+
+- Plate Name
+- Plate Profile
+- Plate Quantity/Repetition
+- Plate Weight
+- Lug information
+
+→ Store in "plate".
+
+
+NEVER MIX THESE CATEGORIES.
+
+
+=====================================================
+EMPTY / MISSING VALUES
+=====================================================
+
+If a field exists in the schema but the corresponding value is:
+
+- not present
+- blank
+- unreadable
+- genuinely unavailable
+
+return:
+
+    null
+
+Do NOT guess.
+
+Do NOT calculate unless explicitly allowed as a fallback.
+
+Do NOT copy a value from another row.
+
+
+=====================================================
+FINAL VALIDATION
+=====================================================
+
+Before producing the final output, verify:
+
+1. Every valid BAR/BBS data row has exactly ONE object.
+2. Every valid PLATE data row has exactly ONE object.
+3. No row was skipped.
+4. No row was duplicated.
+5. No values were copied between rows.
+6. No values were shifted into another column.
+7. Bar data and plate data are completely separate.
+8. Table values take precedence over drawing values.
+9. Empty cells are returned as null.
+10. No value was invented or guessed.
+11. Multiple tables preserve their original top-to-bottom order.
+12. Every object's fields belong to the same physical row.
+
+FINAL PRINCIPLE:
+
+    TABLE VALUE > ASSOCIATED DRAWING VALUE > CALCULATION/INFERENCE
+
+If the table explicitly provides a value, the table value is ALWAYS
+the value to extract.
+`;
+```

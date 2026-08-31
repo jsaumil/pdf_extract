@@ -1,11 +1,136 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { ChatOpenRouter } from "@langchain/openrouter";
 import { ExtractSchema } from "./schema/extractSchema";
+import type {ExtractResult} from "./schema/extractSchema";
 import { compressImage, withRetry } from "./utils/api_helpers";
-// import { TableCropResult } from "./cropper";
+import type { TableCropResult } from "./imageExtractor";
 import config from "../config.json";
 
-export async function extract(imagePath: string, prompt: string) {
+// export async function extract(imagePath: string, prompt: string) {
+//   const b64 = await compressImage(imagePath);
+
+//   const model = new ChatOpenRouter({
+//     model: config.EXTRCAT_MODEL,
+//     apiKey: config.OPENROUTER_API_KEY,
+//   });
+
+//   const message = new HumanMessage({
+//     content: [
+//       {
+//         type: "text",
+//         text: prompt,
+//       },
+//       {
+//         type: "image_url",
+//         image_url: {
+//           url: b64,
+//         },
+//       },
+//     ],
+//   });
+
+//   const structuredModel = model.withStructuredOutput(ExtractSchema);
+//   const response = await withRetry(
+//     () => structuredModel.invoke([message]),
+//     "extract",
+//   );
+
+//   return response;
+// }
+
+function normalizeResponse(raw: any): ExtractResult {
+  return {
+    project_name: raw.project_name ?? null,
+    structure_consultant: raw.structure_consultant ?? null,
+    drawing_no: raw.drawing_no ?? null,
+    date: raw.date ?? null,
+    rev: raw.rev ?? null,
+    element_name: raw.element_name ?? null,
+    element_number: raw.element_number ?? null,
+    plate: raw.plate ?? [],
+    columns: (raw.columns ?? []).map((col: any) => ({
+      ...col,
+      data: typeof col.data === "string"
+        ? { description: col.data }
+        : col.data ?? {},
+    })),
+  };
+}
+
+function attachCropImages(
+  result: ExtractResult,
+  cropResult: TableCropResult
+): ExtractResult {
+  const { cells, cropPaths } = cropResult;
+
+  // Build lookup: extract bar mark from label (format: "bending_{barmark}") → crop path
+  const cropLookup = new Map<string, string>();
+
+  for (const cell of cells) {
+    const cropPath = cropPaths[cell.label];
+    if (!cropPath) continue;
+
+    // Extract bar mark from label like "bending_261" → "261"
+    let key = "";
+    if (cell.label.startsWith("bending_")) {
+      key = cell.label.replace("bending_", "").toLowerCase().trim();
+    } else {
+      key = cell.column_name.toLowerCase().trim();
+    }
+
+    if (!key) continue;
+
+    // Prefer "data" type crops over header/row_label
+    if (cell.cellType === "data" || !cropLookup.has(key)) {
+      cropLookup.set(key, cropPath);
+    }
+  }
+
+  console.log(`[attachCropImages] Crop lookup keys: ${[...cropLookup.keys()].join(", ")}`);
+
+  // Attach to each column entry
+  for (const col of result.columns) {
+    const key = col.bar_mark.toLowerCase().trim();
+
+    // 1. Exact match
+    let match = cropLookup.get(key);
+
+    // 2. Substring match: crop key contains the bar mark
+    if (!match) {
+      for (const [cropKey, cropPath] of cropLookup) {
+        if (cropKey.includes(key)) {
+          match = cropPath;
+          break;
+        }
+      }
+    }
+
+    // 3. Reverse substring: bar mark contains the crop key
+    if (!match) {
+      for (const [cropKey, cropPath] of cropLookup) {
+        if (key.includes(cropKey) && cropKey.length >= 2) {
+          match = cropPath;
+          break;
+        }
+      }
+    }
+
+    if (match) {
+      col.crop_image = match;
+      console.log(`[attachCropImages] Matched bar_mark "${col.bar_mark}" → ${match}`);
+    } else {
+      console.warn(`[attachCropImages] No crop found for bar_mark "${col.bar_mark}"`);
+    }
+  }
+
+  return result;
+}
+
+export async function extract(
+  imagePath: string,
+  prompt: string,
+  cropResult?: TableCropResult | null
+) {
   const b64 = await compressImage(imagePath);
 
   const model = new ChatOpenRouter({
@@ -29,12 +154,24 @@ export async function extract(imagePath: string, prompt: string) {
   });
 
   const structuredModel = model.withStructuredOutput(ExtractSchema);
-  const response = await withRetry(
+  const rawResponse = await withRetry(
     () => structuredModel.invoke([message]),
-    "extract",
+    "extract"
   );
 
-  return response;
+  if (!rawResponse || typeof rawResponse !== "object") {
+    console.warn("[extract] LLM returned empty/invalid response, returning empty result");
+    return normalizeResponse({});
+  }
+
+  const result = normalizeResponse(rawResponse);
+
+  // Inject crop image paths into the extracted data
+  if (cropResult) {
+    attachCropImages(result, cropResult);
+  }
+
+  return result;
 }
 
 // export async function extractFromCrops(

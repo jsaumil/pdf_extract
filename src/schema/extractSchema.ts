@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { column, plate } from "./describer";
 
 const dataSchema = z.object({
   bar_mark: z
@@ -7,6 +8,11 @@ const dataSchema = z.object({
       "the name of the bar it can be also written position we can all bar_mark or position",
     ),
   diameter: z.coerce.number().describe("extract the bar diameter"),
+  crop_image: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe("location of the image of bending details — will be injected automatically, leave as null"),
   qty: z.coerce
     .number()
     .describe("extract the qty from the table it is the number of qty"),
@@ -17,10 +23,13 @@ const dataSchema = z.object({
     .number()
     .describe("extract the total number of the bar length"),
   data: z
-    .record(z.string(), z.coerce.number().nullable())
+    .union([
+      z.record(z.string(), z.union([z.coerce.number(), z.string()]).nullable()),
+      z.string(),
+    ])
     .default({})
     .describe(
-      "Extract only dimension values such as A, B, C, C1, C2, D, D1, D2, D3. Do not put text fields such as bending_details inside this object.",
+      "Extract dimension values such as A, B, C, C1, C2, D, D1, D2, D3 as a record with numeric values. If the item has no bending dimensions (e.g. sleeves, couplers, plates), put a description string instead.",
     ),
   total_weigth: z.coerce
     .number()
@@ -91,11 +100,11 @@ export const ExtractSchema = z.object({
   plate: z
     .array(plateSchema)
     .default([])
-    .describe("Extract from the plate table"),
+    .describe(plate),
   columns: z
     .array(dataSchema)
     .default([])
-    .describe("Extract from bar or columns table extracted from the table"),
+    .describe(column),
 });
 
 export type ExtractResult = z.infer<typeof ExtractSchema>;

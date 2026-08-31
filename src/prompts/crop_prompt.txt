@@ -1,5 +1,18 @@
-crop the images of each
-bending details from the table
-make sure that it should save each and every shape of the bending and also extract some data's like bar mark's
+Crop bending detail images from this reinforcement schedule table.
 
-like bar_mark: image of bending detail
+MAXIMUM: Call crop_cell at most 10 times total, then call finish_table.
+
+Steps:
+1. Look at the table. Identify rows that have bending detail shape drawings.
+2. Crop each bending detail using crop_cell (max 10 calls total).
+3. After cropping, IMMEDIATELY call finish_table — do NOT try to crop more.
+
+Rules for crop_cell:
+- `column_name`: The exact bar mark number only (e.g. "2031"). No prefixes.
+- `label`: Format `bending_{barmark}` (e.g. "bending_2031").
+- `cellType`: Always "data".
+
+IMPORTANT:
+- Call finish_table after at most 10 crop_cell calls.
+- If the page has no bending details, call finish_table immediately.
+- Never exceed 10 crop_cell calls.

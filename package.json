@@ -12,6 +12,9 @@
   "dependencies": {
     "@langchain/core": "^1.2.9",
     "@langchain/openrouter": "^0.4.10",
+    "bcryptjs": "^3.0.3",
+    "jsonwebtoken": "^9.0.3",
+    "mongodb": "^7.6.0",
     "mupdf": "^1.28.0",
     "sharp": "^0.35.3",
     "zod": "^4.4.3"
