@@ -1,6 +1,7 @@
 import path from "path";
 import fs from "fs";
 import { extract } from "./src/extractor";
+import { cropper } from "./src/imageExtractor";
 import { convertPdfToImages } from "./src/pdfToImage";
 import { mergeExtractionResults } from "./src/schema/mergeExtraction";
 import { detectAndCropBbs } from "./src/langgraph";
@@ -15,11 +16,18 @@ const timestamp = new Date()
 
 const outputDir = path.join("output", timestamp);
 fs.mkdirSync(outputDir, { recursive: true });
+const cropsDir = path.join(outputDir, "crops");
+fs.mkdirSync(cropsDir, { recursive: true });
 const rowDir = path.join(outputDir, "bbsrow");
 fs.mkdirSync(rowDir, { recursive: true });
 
 const PROMPT = fs.readFileSync(
   path.join(__dirname, "src/prompts", "extract_prompt.txt"),
+  "utf-8",
+);
+
+const CROP_PROMPT = fs.readFileSync(
+  path.join(__dirname, "src/prompts", "crop_prompt.txt"),
   "utf-8",
 );
 
@@ -33,28 +41,16 @@ const results = [];
 for (const page of pages) {
   console.log(`Extracting: ${page}`);
   const bbsRows = await detectAndCropBbs(page, rowDir);
-  console.log(`Found ${bbsRows.length} BBS rows`);
-
-  // Pass bending detail crops directly — no LLM cropper needed
-  const cropResults = bbsRows.map((row) => ({
-    imagePath: row.bendingDetailsPath,
-    cells: [
-      {
-        column_name: `row_${row.rowIndex}`,
-        cellType: "data" as const,
-        x1: 0,
-        y1: 0,
-        x2: 1,
-        y2: 1,
-        label: `bbs_row_${row.rowIndex}`,
-      },
-    ],
-    cropPaths: {
-      [`bbs_row_${row.rowIndex}`]: row.bendingDetailsPath,
-    },
-  }));
-
-  const result = await extract(page, PROMPT, cropResults);
+  let cropResult = [];
+  console.log(bbsRows);
+  if (bbsRows.length > 0) {
+    for (const row of bbsRows) {
+      console.log(`  Cropping BBS row: ${row.path}`);
+      const crop = await cropper(row.path, cropsDir, CROP_PROMPT);
+      cropResult.push(crop);
+    }
+  }
+  const result = await extract(page, PROMPT, cropResult);
   results.push(result);
 }
 const finalResult = mergeExtractionResults(results);
