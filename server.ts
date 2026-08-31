@@ -6,10 +6,10 @@ import fs from "fs";
 
 // Extraction pipeline imports
 import { convertPdfToImages } from "./src/pdfToImage";
-import { cropper } from "./src/imageExtractor";
 import { extract } from "./src/extractor";
 import { mergeExtractionResults } from "./src/schema/mergeExtraction";
 import type { ExtractResult } from "./src/schema/extractSchema";
+import { detectAndCropBbs } from "./src/langgraph";
 
 const JWT_SECRET = process.env.JWT_SECRET || "pdf-extract-secret-key-2024";
 const PORT = 3000;
@@ -50,8 +50,8 @@ async function runExtraction(projectId: number, pdfPath: string) {
 
   const outputDir = path.join("output", timestamp);
   fs.mkdirSync(outputDir, { recursive: true });
-  const cropsDir = path.join(outputDir, "crops");
-  fs.mkdirSync(cropsDir, { recursive: true });
+  const rowDir = path.join(outputDir, "bbsrow");
+  fs.mkdirSync(rowDir, { recursive: true });
 
   try {
     db.run(
@@ -69,17 +69,36 @@ async function runExtraction(projectId: number, pdfPath: string) {
 
       db.run(
         "UPDATE projects SET extraction_progress = ? WHERE id = ?",
-        [`Cropping page ${i + 1}/${pages.length}...`, projectId]
+        [`Detecting BBS tables on page ${i + 1}/${pages.length}...`, projectId]
       );
 
-      const cropResult = await cropper(page, cropsDir, CROP_PROMPT);
+      const bbsRows = await detectAndCropBbs(page, rowDir);
+
+      // Pass bending detail crops directly — no LLM cropper needed
+      const cropResults = bbsRows.map((row) => ({
+        imagePath: row.bendingDetailsPath,
+        cells: [
+          {
+            column_name: `row_${row.rowIndex}`,
+            cellType: "data" as const,
+            x1: 0,
+            y1: 0,
+            x2: 1,
+            y2: 1,
+            label: `bbs_row_${row.rowIndex}`,
+          },
+        ],
+        cropPaths: {
+          [`bbs_row_${row.rowIndex}`]: row.bendingDetailsPath,
+        },
+      }));
 
       db.run(
         "UPDATE projects SET extraction_progress = ? WHERE id = ?",
         [`Extracting data from page ${i + 1}/${pages.length}...`, projectId]
       );
 
-      const result = await extract(page, PROMPT, cropResult);
+      const result = await extract(page, PROMPT, cropResults);
       results.push(result);
     }
 

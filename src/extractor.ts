@@ -116,7 +116,7 @@ function attachCropImages(
 export async function extract(
   imagePath: string,
   prompt: string,
-  cropResult?: TableCropResult | null
+  cropResults?: TableCropResult[] | null
 ) {
   const b64 = await compressImage(imagePath);
 
@@ -149,8 +149,10 @@ export async function extract(
   const result = normalizeResponse(rawResponse);
 
   // Inject crop image paths into the extracted data
-  if (cropResult) {
-    attachCropImages(result, cropResult);
+  if (cropResults && cropResults.length > 0) {
+    for (const cropResult of cropResults) {
+      attachCropImages(result, cropResult);
+    }
   }
 
   return result;

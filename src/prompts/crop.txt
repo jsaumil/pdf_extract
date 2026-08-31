@@ -1,0 +1,142 @@
+You are given a CROPPED SINGLE ROW from a Reinforcement / Bar Bending Schedule (BBS).
+
+The original table contains columns in this order:
+
+1. BAR MARK
+2. BAR DIAMETER
+3. QTY
+4. BENDING DETAILS
+5. A
+6. B
+7. C
+8. C1
+9. C2
+10. D
+11. D1
+12. BAR CUTTING LENGTH
+13. TOTAL BAR LENGTH
+14. TOTAL WEIGHT
+
+IMPORTANT:
+The input image is ONLY a cropped DATA ROW.
+
+The column headings are NOT included in the image.
+
+Therefore, DO NOT try to find or read the "BENDING DETAILS" heading.
+
+Instead, identify the BENDING DETAIL using its POSITION in the row.
+
+The BENDING DETAILS drawing is the FOURTH column, immediately after:
+
+BAR MARK → BAR DIAMETER → QTY
+
+Your task is to crop ONLY the graphical bending detail from this fourth-column region.
+
+--------------------------------------------------
+WHAT COUNTS AS THE BENDING DETAIL
+--------------------------------------------------
+
+The bending detail is the actual graphical representation of the reinforcement bar.
+
+It may contain:
+
+- horizontal lines
+- vertical lines
+- L shapes
+- U shapes
+- rectangular shapes
+- hooks
+- bends
+- arcs
+- connected line segments
+- letters such as A, B, C, C1, C2, D, D1, D2 attached to the drawing
+
+For example, if the fourth column contains:
+
+        A
+   ─────────────
+
+then the COMPLETE bending detail is:
+
+        A
+   ─────────────
+
+Both the "A" and the line belong to the bending detail.
+
+--------------------------------------------------
+CRITICAL RULES
+--------------------------------------------------
+
+1. The input contains ONE BBS row.
+
+2. Identify the BAR MARK from the first column.
+
+3. The BENDING DETAIL is located in the FOURTH COLUMN.
+
+4. Do NOT depend on the presence of column headings.
+
+5. Do NOT crop the entire row.
+
+6. Do NOT crop the entire fourth column if there is unnecessary whitespace.
+
+7. Crop the tight bounding box around the ACTUAL BENDING DETAIL DRAWING.
+
+8. Include all dimension letters that are visually attached to the bending drawing.
+
+9. Do NOT include the numerical dimension values from the neighboring A, B, C, C1, C2, D or D1 columns.
+
+10. Do NOT include:
+    - Bar Mark
+    - Bar Diameter
+    - QTY
+    - Bar Cutting Length
+    - Total Bar Length
+    - Total Weight
+
+11. Keep a small amount of whitespace around the bending drawing so that no part of the drawing or its labels is cut off.
+
+12. If the bending detail is only a simple line with "A" above it, crop the "A" and the line together.
+
+13. If the bending detail is a complex shape, crop the COMPLETE shape including all bends and attached labels.
+
+14. Do not skip the row.
+
+--------------------------------------------------
+OUTPUT
+--------------------------------------------------
+
+Return exactly ONE JSON object:
+
+{
+  "column_name": "<bar mark>",
+  "label": "bending_<bar mark>",
+  "cellType": "data",
+  "x": <x coordinate>,
+  "y": <y coordinate>,
+  "width": <width>,
+  "height": <height>
+}
+
+IMPORTANT:
+
+column_name must contain ONLY the bar mark number.
+
+For example:
+
+"261"
+
+NOT:
+
+"Bar 261"
+"BM 261"
+"Mark 261"
+
+The label must be:
+
+"bending_261"
+
+The cellType must be:
+
+"data"
+
+The coordinates must tightly surround ONLY the bending detail drawing.

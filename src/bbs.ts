@@ -21,6 +21,7 @@ export interface BbsRowCrop {
   height: number;
 
   path: string;
+  bendingDetailsPath: string;
 }
 
 export interface BbsCropOptions {
@@ -543,6 +544,52 @@ function groupNearbyCoordinates(values: number[], maxGap: number): number[] {
 }
 
 /**
+ * Detect vertical grid lines inside a table.
+ * Returns X coordinates of each vertical line.
+ */
+function detectVerticalLines(cv: any, tableImage: any): number[] {
+  const gray = new cv.Mat();
+  const binary = new cv.Mat();
+  const vertical = new cv.Mat();
+
+  try {
+    cv.cvtColor(tableImage, gray, cv.COLOR_RGBA2GRAY);
+    cv.threshold(gray, binary, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
+
+    const kernelHeight = Math.max(20, Math.floor(tableImage.rows * 0.3));
+
+    const kernel = cv.getStructuringElement(
+      cv.MORPH_RECT,
+      new cv.Size(1, kernelHeight),
+    );
+
+    cv.morphologyEx(binary, vertical, cv.MORPH_OPEN, kernel);
+    kernel.delete();
+
+    const lines: number[] = [];
+    const threshold = tableImage.rows * 0.3;
+
+    for (let x = 0; x < tableImage.cols; x++) {
+      let count = 0;
+      for (let y = 0; y < tableImage.rows; y++) {
+        if (vertical.ucharPtr(y, x)[0] > 0) {
+          count++;
+        }
+      }
+      if (count >= threshold) {
+        lines.push(x);
+      }
+    }
+
+    return groupNearbyCoordinates(lines, 3);
+  } finally {
+    gray.delete();
+    binary.delete();
+    vertical.delete();
+  }
+}
+
+/**
  * Crop all BBS rows from one detected table.
  */
 async function cropTableRows(
@@ -581,60 +628,54 @@ async function cropTableRows(
 
   try {
     const lineYs = detectHorizontalLines(cv, tableMat);
+    const lineXs = detectVerticalLines(cv, tableMat);
 
     console.log(`Table ${tableIndex}:`, table);
-
     console.log(`Horizontal lines:`, lineYs);
+    console.log(`Vertical lines:`, lineXs);
 
     /*
-     * Example from your screenshot:
+     * Find the bending details column.
      *
-     * 0    title
-     * 29   title bottom
-     * 56   bending dimensions bottom
-     * 112  header bottom
-     * 168  row 1 bottom
-     * 224  row 2 bottom
-     *
-     * Therefore:
-     *
-     * headerRows = 3
-     *
-     * starts cropping after the header.
+     * It is typically the LAST column (rightmost).
+     * We use the last two vertical line X positions
+     * to define the column boundaries.
      */
+    let bendingColLeft = 0;
+    let bendingColRight = tableImage.info.width;
+
+    if (lineXs.length >= 2) {
+      bendingColLeft = lineXs[lineXs.length - 2];
+      bendingColRight = lineXs[lineXs.length - 1];
+    } else if (lineXs.length === 1) {
+      bendingColLeft = lineXs[0];
+    }
+
+    console.log(`Bending details column: x=${bendingColLeft} to x=${bendingColRight}`);
 
     const crops: BbsRowCrop[] = [];
 
     for (let i = headerRows; i < lineYs.length - 1; i++) {
       const relativeTop = lineYs[i];
-
       const relativeBottom = lineYs[i + 1];
-
       const rowHeight = relativeBottom - relativeTop;
 
-      /*
-       * Ignore accidental tiny regions.
-       */
       if (rowHeight < 20) {
         continue;
       }
 
+      // --- Full row crop ---
       const left = Math.max(0, table.x - rowPadding);
-
       const top = Math.max(0, table.y + relativeTop - rowPadding);
-
       const right = Math.min(
         table.x + table.width + rowPadding,
         tableImage.info.width + table.x,
       );
-
       const bottom = Math.min(
         table.y + relativeBottom + rowPadding,
         tableImage.info.height + table.y,
       );
-
       const width = right - left;
-
       const height = bottom - top;
 
       if (width <= 0 || height <= 0) {
@@ -643,22 +684,36 @@ async function cropTableRows(
 
       const rowIndex = i - headerRows + 1;
 
-      const filename = `table_${tableIndex}_row_${String(rowIndex).padStart(
-        3,
-        "0",
-      )}.png`;
-
+      const filename = `table_${tableIndex}_row_${String(rowIndex).padStart(3, "0")}.png`;
       const outputPath = path.join(outputDir, filename);
 
       await sharp(imagePath)
-        .extract({
-          left,
-          top,
-          width,
-          height,
-        })
+        .extract({ left, top, width, height })
         .png()
         .toFile(outputPath);
+
+      // --- Bending details column crop ---
+      const bendLeft = Math.max(0, table.x + bendingColLeft - rowPadding);
+      const bendRight = Math.min(
+        table.x + bendingColRight + rowPadding,
+        tableImage.info.width + table.x,
+      );
+      const bendWidth = bendRight - bendLeft;
+
+      const bendingFilename = `table_${tableIndex}_row_${String(rowIndex).padStart(3, "0")}_bend.png`;
+      const bendingOutputPath = path.join(outputDir, bendingFilename);
+
+      if (bendWidth > 10) {
+        await sharp(imagePath)
+          .extract({
+            left: bendLeft,
+            top,
+            width: bendWidth,
+            height,
+          })
+          .png()
+          .toFile(bendingOutputPath);
+      }
 
       crops.push({
         tableIndex,
@@ -668,10 +723,12 @@ async function cropTableRows(
         width,
         height,
         path: outputPath,
+        bendingDetailsPath: bendWidth > 10 ? bendingOutputPath : outputPath,
       });
 
       console.log(
-        `  Row ${rowIndex}: ` + `${width}x${height} ` + `→ ${outputPath}`,
+        `  Row ${rowIndex}: ${width}x${height} → ${outputPath}` +
+        ` | bend: ${bendWidth}x${height} → ${bendingOutputPath}`,
       );
     }
 

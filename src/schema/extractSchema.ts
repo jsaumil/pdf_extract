@@ -67,29 +67,35 @@ export const ExtractSchema = z.object({
   project_name: z
     .string()
     .nullable()
+    .default(null)
     .describe("the name of the project it mostly in the information table"),
   structure_consultant: z
     .string()
     .nullable()
+    .default(null)
     .describe("the  name of the consultant of the project"),
-  drawing_no: z.string().nullable().describe("extract the drawing number"),
+  drawing_no: z.string().nullable().default(null).describe("extract the drawing number"),
   date: z
     .string()
     .nullable()
+    .default(null)
     .describe("extract the date from the information table"),
   rev: z
     .string()
     .nullable()
+    .default(null)
     .describe("extract the rev number from the information table"),
   element_name: z
     .string()
     .nullable()
+    .default(null)
     .describe(
       "Extract the structural element name, for example N3C-2-C15, if available",
     ),
   element_number: z
     .string()
     .nullable()
+    .default(null)
     .describe(
       "Extract the number of the elements only if explicity given. Do not guess or calculate it",
     ),
