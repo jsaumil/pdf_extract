@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Extract - Project</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+  .navbar { background: #1e293b; border-bottom: 1px solid #334155; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
+  .navbar h1 { font-size: 18px; color: #f8fafc; }
+  .navbar-left { display: flex; align-items: center; gap: 16px; }
+  .btn-back { background: transparent; border: 1px solid #475569; color: #94a3b8; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; text-decoration: none; }
+  .btn-back:hover { background: #334155; color: #e2e8f0; }
+  .content { max-width: 1000px; margin: 32px auto; padding: 0 20px; }
+  .project-header { margin-bottom: 32px; }
+  .project-header h2 { font-size: 22px; color: #f8fafc; margin-bottom: 4px; }
+  .project-header p { color: #64748b; font-size: 14px; }
+  .upload-section { background: #1e293b; border: 2px dashed #334155; border-radius: 12px; padding: 48px; text-align: center; margin-bottom: 32px; transition: border-color 0.2s; cursor: pointer; position: relative; }
+  .upload-section:hover, .upload-section.dragover { border-color: #3b82f6; }
+  .upload-section h3 { color: #f8fafc; margin-bottom: 8px; }
+  .upload-section p { color: #64748b; font-size: 14px; margin-bottom: 16px; }
+  .upload-section input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .btn-upload { background: #3b82f6; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; pointer-events: none; }
+  .progress-section { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; margin-bottom: 32px; }
+  .progress-section h3 { font-size: 16px; color: #f8fafc; margin-bottom: 12px; }
+  .progress-bar-container { background: #0f172a; border-radius: 8px; height: 8px; overflow: hidden; margin-bottom: 12px; }
+  .progress-bar { height: 100%; background: #3b82f6; border-radius: 8px; transition: width 0.3s; }
+  .progress-text { color: #94a3b8; font-size: 13px; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #334155; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .results-section { margin-bottom: 32px; }
+  .results-section h3 { font-size: 16px; color: #f8fafc; margin-bottom: 16px; }
+  .result-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+  .result-card h4 { color: #60a5fa; font-size: 14px; margin-bottom: 12px; }
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .info-item label { display: block; font-size: 12px; color: #64748b; margin-bottom: 2px; }
+  .info-item span { font-size: 14px; color: #e2e8f0; }
+  .table-container { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #0f172a; color: #94a3b8; padding: 10px 12px; text-align: left; font-weight: 500; border-bottom: 1px solid #334155; white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid #1e293b; color: #e2e8f0; white-space: nowrap; }
+  tr:hover td { background: #1e293b; }
+  .crop-thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; border: 1px solid #334155; cursor: pointer; }
+  .crop-thumb:hover { border-color: #3b82f6; }
+  .no-results { text-align: center; padding: 40px; color: #64748b; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+  .badge-null { background: #1e293b; color: #64748b; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal-overlay img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <div class="navbar-left">
+    <a href="/dashboard" class="btn-back">← Back</a>
+    <h1 id="projectTitle">Project</h1>
+  </div>
+</div>
+
+<div class="content">
+  <div class="project-header">
+    <h2 id="projectName"></h2>
+    <p id="projectMeta"></p>
+  </div>
+
+  <div class="upload-section" id="uploadSection">
+    <h3>Upload PDF Drawing</h3>
+    <p>Drag & drop a PDF file here or click to browse</p>
+    <span class="btn-upload">Choose File</span>
+    <input type="file" accept=".pdf" onchange="uploadFile(this.files[0])">
+  </div>
+
+  <div class="progress-section hidden" id="progressSection">
+    <h3><span class="spinner"></span> Extraction in Progress</h3>
+    <div class="progress-bar-container">
+      <div class="progress-bar" id="progressBar" style="width: 30%"></div>
+    </div>
+    <p class="progress-text" id="progressText">Starting...</p>
+  </div>
+
+  <div class="results-section hidden" id="resultsSection">
+    <h3>Extraction Results</h3>
+    <div id="resultsContent"></div>
+  </div>
+</div>
+
+<div id="imageModal" class="modal-overlay hidden" onclick="this.classList.add('hidden')">
+  <img id="modalImage" src="">
+</div>
+
+<script>
+  const API = '';
+  const token = localStorage.getItem('token');
+  if (!token) window.location.href = '/login';
+
+  const params = new URLSearchParams(window.location.search);
+  const projectId = params.get('id');
+  if (!projectId) window.location.href = '/dashboard';
+
+  function headers(auth) {
+    const h = auth ? { 'Authorization': `Bearer ${token}` } : {};
+    return h;
+  }
+
+  let pollInterval = null;
+
+  async function loadProject() {
+    try {
+      const res = await fetch(`${API}/api/projects/${projectId}`, { headers: headers(true) });
+      if (!res.ok) throw new Error('Not found');
+      const { project } = await res.json();
+
+      document.getElementById('projectName').textContent = project.name;
+      document.getElementById('projectTitle').textContent = project.name;
+      document.getElementById('projectMeta').textContent =
+        `Created ${new Date(project.created_at).toLocaleDateString()}`;
+
+      if (project.status === 'processing') {
+        showProgress(project.extractionProgress || 'Processing...');
+        startPolling();
+      } else if (project.status === 'completed' && project.result) {
+        showResults(project.result);
+      } else if (project.status === 'failed') {
+        showProgress('Failed: ' + (project.extractionProgress || 'Unknown error'));
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('progressBar').style.background = '#ef4444';
+      }
+    } catch {
+      window.location.href = '/dashboard';
+    }
+  }
+
+  function showProgress(text) {
+    document.getElementById('progressSection').classList.remove('hidden');
+    document.getElementById('progressText').textContent = text;
+  }
+
+  async function uploadFile(file) {
+    if (!file || !file.name.endsWith('.pdf')) {
+      alert('Please select a PDF file');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    document.getElementById('uploadSection').classList.add('hidden');
+    showProgress('Uploading file...');
+
+    try {
+      const res = await fetch(`${API}/api/projects/${projectId}/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error);
+      }
+      document.getElementById('progressBar').style.width = '20%';
+      startPolling();
+    } catch (err) {
+      alert('Upload failed: ' + err.message);
+      document.getElementById('uploadSection').classList.remove('hidden');
+      document.getElementById('progressSection').classList.add('hidden');
+    }
+  }
+
+  function startPolling() {
+    if (pollInterval) return;
+    pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API}/api/projects/${projectId}/status`, { headers: headers(true) });
+        const data = await res.json();
+
+        if (data.status === 'completed') {
+          clearInterval(pollInterval);
+          pollInterval = null;
+          loadProject();
+        } else if (data.status === 'failed') {
+          clearInterval(pollInterval);
+          pollInterval = null;
+          showProgress('Failed: ' + (data.progress || 'Unknown error'));
+          document.getElementById('progressBar').style.width = '100%';
+          document.getElementById('progressBar').style.background = '#ef4444';
+        } else if (data.status === 'processing') {
+          showProgress(data.progress || 'Processing...');
+          const current = parseInt(document.getElementById('progressBar').style.width) || 20;
+          document.getElementById('progressBar').style.width = Math.min(current + 5, 90) + '%';
+        }
+      } catch {}
+    }, 2000);
+  }
+
+  function showResults(result) {
+    document.getElementById('progressSection').classList.add('hidden');
+    document.getElementById('resultsSection').classList.remove('hidden');
+
+    let html = '';
+
+    // Project info card
+    html += `<div class="result-card">
+      <h4>Project Information</h4>
+      <div class="info-grid">
+        <div class="info-item"><label>Project Name</label><span>${esc(result.project_name) || '<span class="badge badge-null">N/A</span>'}</span></div>
+        <div class="info-item"><label>Consultant</label><span>${esc(result.structure_consultant) || '<span class="badge badge-null">N/A</span>'}</span></div>
+        <div class="info-item"><label>Drawing No</label><span>${esc(result.drawing_no) || '<span class="badge badge-null">N/A</span>'}</span></div>
+        <div class="info-item"><label>Date</label><span>${esc(result.date) || '<span class="badge badge-null">N/A</span>'}</span></div>
+        <div class="info-item"><label>Rev</label><span>${esc(result.rev) || '<span class="badge badge-null">N/A</span>'}</span></div>
+        <div class="info-item"><label>Element</label><span>${esc(result.element_name) || '<span class="badge badge-null">N/A</span>'}</span></div>
+      </div>
+    </div>`;
+
+    // Plate info
+    if (result.plate && result.plate.length > 0) {
+      html += `<div class="result-card">
+        <h4>Plate Details (${result.plate.length})</h4>
+        <div class="table-container"><table>
+          <thead><tr><th>Name</th><th>Profile</th><th>Repetation</th><th>Weight (kg)</th><th>Dia Lug</th><th>Lug Length</th><th>Lug Weight</th></tr></thead>
+          <tbody>${result.plate.map(p => `<tr>
+            <td>${esc(p.plate_name) || '-'}</td>
+            <td>${esc(p.plate_profile) || '-'}</td>
+            <td>${p.plate_repetation ?? '-'}</td>
+            <td>${p.weigth ?? '-'}</td>
+            <td>${p.dia_of_lug ?? '-'}</td>
+            <td>${p.total_length_of_lug ?? '-'}</td>
+            <td>${p.total_weight_of_lug ?? '-'}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </div>`;
+    }
+
+    // Columns / Bar data
+    if (result.columns && result.columns.length > 0) {
+      html += `<div class="result-card">
+        <h4>Bar Bending Schedule (${result.columns.length} bars)</h4>
+        <div class="table-container"><table>
+          <thead><tr><th>Image</th><th>Bar Mark</th><th>Dia</th><th>Qty</th><th>Length</th><th>Total Length</th><th>A</th><th>B</th><th>C</th><th>C1</th><th>C2</th><th>D</th><th>D1</th><th>Weight (kg)</th></tr></thead>
+          <tbody>${result.columns.map(c => `<tr>
+            <td>${c.crop_image ? `<img class="crop-thumb" src="/${c.crop_image}" onclick="event.stopPropagation();showImage('/${c.crop_image}')" onerror="this.style.display='none'">` : '<span class="badge badge-null">-</span>'}</td>
+            <td><strong>${esc(c.bar_mark)}</strong></td>
+            <td>${c.diameter}</td>
+            <td>${c.qty}</td>
+            <td>${c.length}</td>
+            <td>${c.total_bar_length}</td>
+            <td>${c.data?.A ?? '-'}</td>
+            <td>${c.data?.B ?? '-'}</td>
+            <td>${c.data?.C ?? '-'}</td>
+            <td>${c.data?.C1 ?? '-'}</td>
+            <td>${c.data?.C2 ?? '-'}</td>
+            <td>${c.data?.D ?? '-'}</td>
+            <td>${c.data?.D1 ?? '-'}</td>
+            <td>${c.total_weigth}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </div>`;
+    }
+
+    if (!html) {
+      html = '<div class="no-results">No data extracted from this file.</div>';
+    }
+
+    document.getElementById('resultsContent').innerHTML = html;
+  }
+
+  function showImage(src) {
+    document.getElementById('modalImage').src = src;
+    document.getElementById('imageModal').classList.remove('hidden');
+  }
+
+  function esc(s) {
+    if (!s) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // Drag and drop
+  const uploadSection = document.getElementById('uploadSection');
+  uploadSection.addEventListener('dragover', e => { e.preventDefault(); uploadSection.classList.add('dragover'); });
+  uploadSection.addEventListener('dragleave', () => uploadSection.classList.remove('dragover'));
+  uploadSection.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadSection.classList.remove('dragover');
+    if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+  });
+
+  loadProject();
+</script>
+</body>
+</html>

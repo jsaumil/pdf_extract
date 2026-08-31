@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Extract - Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+  .navbar { background: #1e293b; border-bottom: 1px solid #334155; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
+  .navbar h1 { font-size: 18px; color: #f8fafc; }
+  .navbar-right { display: flex; align-items: center; gap: 16px; }
+  .navbar-right span { color: #94a3b8; font-size: 14px; }
+  .btn-logout { background: transparent; border: 1px solid #475569; color: #94a3b8; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .btn-logout:hover { background: #334155; color: #e2e8f0; }
+  .content { max-width: 900px; margin: 40px auto; padding: 0 20px; }
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+  .header h2 { font-size: 22px; color: #f8fafc; }
+  .btn-primary { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+  .projects { display: flex; flex-direction: column; gap: 12px; }
+  .project-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 20px; display: flex; align-items: center; justify-content: space-between; transition: border-color 0.2s; cursor: pointer; }
+  .project-card:hover { border-color: #3b82f6; }
+  .project-info h3 { font-size: 16px; color: #f8fafc; margin-bottom: 4px; }
+  .project-info p { font-size: 13px; color: #64748b; }
+  .project-actions { display: flex; gap: 8px; align-items: center; }
+  .status { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+  .status-created { background: #1e3a5f; color: #60a5fa; }
+  .status-processing { background: #422006; color: #fbbf24; }
+  .status-completed { background: #052e16; color: #4ade80; }
+  .status-failed { background: #450a0a; color: #f87171; }
+  .btn-delete { background: transparent; border: 1px solid #7f1d1d; color: #f87171; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .btn-delete:hover { background: #450a0a; }
+  .empty { text-align: center; padding: 60px 20px; color: #64748b; }
+  .empty p { margin-bottom: 16px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 32px; width: 100%; max-width: 420px; }
+  .modal h3 { margin-bottom: 20px; color: #f8fafc; }
+  .modal input { width: 100%; padding: 12px 14px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 14px; margin-bottom: 16px; outline: none; }
+  .modal input:focus { border-color: #3b82f6; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .btn-cancel { background: transparent; border: 1px solid #475569; color: #94a3b8; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <h1>PDF Extract</h1>
+  <div class="navbar-right">
+    <span id="userName"></span>
+    <button class="btn-logout" onclick="logout()">Logout</button>
+  </div>
+</div>
+
+<div class="content">
+  <div class="header">
+    <h2>My Projects</h2>
+    <button class="btn-primary" onclick="showCreateModal()">+ New Project</button>
+  </div>
+
+  <div id="projectsList" class="projects"></div>
+  <div id="emptyState" class="empty hidden">
+    <p>No projects yet. Create one to get started.</p>
+  </div>
+</div>
+
+<div id="createModal" class="modal-overlay hidden" onclick="if(event.target===this)hideCreateModal()">
+  <div class="modal">
+    <h3>Create New Project</h3>
+    <input type="text" id="projectName" placeholder="Project name (e.g. ADANICONNEX)" autofocus>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="hideCreateModal()">Cancel</button>
+      <button class="btn-primary" onclick="createProject()">Create</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = '';
+  const token = localStorage.getItem('token');
+  if (!token) window.location.href = '/login';
+
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  document.getElementById('userName').textContent = user.name || user.email || '';
+
+  function headers() {
+    return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+  }
+
+  async function loadProjects() {
+    try {
+      const res = await fetch(`${API}/api/projects`, { headers: headers() });
+      if (!res.ok) throw new Error('Unauthorized');
+      const { projects } = await res.json();
+
+      const list = document.getElementById('projectsList');
+      const empty = document.getElementById('emptyState');
+
+      if (projects.length === 0) {
+        list.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+      list.innerHTML = projects.map(p => `
+        <div class="project-card" onclick="openProject('${p.id}')">
+          <div class="project-info">
+            <h3>${esc(p.name)}</h3>
+            <p>${new Date(p.created_at).toLocaleDateString()} &middot; ${p.status === 'completed' ? 'Extraction complete' : p.status === 'processing' ? (p.extraction_progress || 'Processing...') : 'No extraction yet'}</p>
+          </div>
+          <div class="project-actions">
+            <span class="status status-${p.status}">${p.status}</span>
+            <button class="btn-delete" onclick="event.stopPropagation();deleteProject('${p.id}')">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    } catch {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+  }
+
+  function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  function showCreateModal() {
+    document.getElementById('createModal').classList.remove('hidden');
+    document.getElementById('projectName').value = '';
+    document.getElementById('projectName').focus();
+  }
+
+  function hideCreateModal() {
+    document.getElementById('createModal').classList.add('hidden');
+  }
+
+  async function createProject() {
+    const name = document.getElementById('projectName').value.trim();
+    if (!name) return;
+
+    await fetch(`${API}/api/projects`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ name }),
+    });
+    hideCreateModal();
+    loadProjects();
+  }
+
+  async function deleteProject(id) {
+    if (!confirm('Delete this project?')) return;
+    await fetch(`${API}/api/projects/${id}`, {
+      method: 'DELETE',
+      headers: headers(),
+    });
+    loadProjects();
+  }
+
+  function openProject(id) {
+    window.location.href = `/project?id=${id}`;
+  }
+
+  function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+  }
+
+  loadProjects();
+</script>
+</body>
+</html>

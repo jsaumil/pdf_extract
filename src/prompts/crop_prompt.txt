@@ -1,5 +1,11 @@
-crop the images of each
-bending details from the table
-make sure that it should save each and every shape of the bending and also extract some data's like bar mark's
+Crop the bending detail images from this reinforcement schedule table.
 
-like bar_mark: image of bending detail
+For EACH bar mark row, crop the bending detail shape image from the "Bending Details" or "Shape" column.
+
+CRITICAL RULES:
+1. The `column_name` field MUST contain ONLY the exact bar mark number (e.g., "2031", "622", "5395"). Do NOT add prefixes like "Bar", "BM", "Mark" or any extra text.
+2. The `label` field should follow the format: `bending_{barmark}` (e.g., "bending_2031", "bending_622").
+3. Each crop must capture the COMPLETE bending shape drawing for that row — the full shape with all bends visible.
+4. Do NOT skip any rows. Crop every single bar mark's bending detail.
+5. For the `cellType`, use "data" for bending detail crops.
+6. Start from the first data row and work downward through all rows systematically.

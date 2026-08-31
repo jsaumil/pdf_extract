@@ -27,7 +27,7 @@ const CROP_PROMPT = fs.readFileSync(
 );
 
 // pdf to image
-const pages = await convertPdfToImages("./input/merged.pdf", outputDir, {
+const pages = await convertPdfToImages("./input/input.pdf", outputDir, {
   dpi: 300,
 });
 console.log(pages);
@@ -46,16 +46,13 @@ const results = [];
 for (const page of pages) {
   console.log(`Extracting: ${page}`);
 
-  // const result = await extract(page, PROMPT);
-  const result = await cropper(page, cropsDir, CROP_PROMPT);
+  const cropResult = await cropper(page, cropsDir, CROP_PROMPT);
+  const result = await extract(page, PROMPT, cropResult);
   results.push(result);
 }
-// const finalResult = mergeExtractionResults(results);
+const finalResult = mergeExtractionResults(results);
 
-// console.log(JSON.stringify(finalResult, null, 2));
-const output = {
-  extractions: results,
-};
+console.log(JSON.stringify(finalResult, null, 2));
 const resultPath = path.join(outputDir, "result.json");
-fs.writeFileSync(resultPath, JSON.stringify(output, null, 2));
+fs.writeFileSync(resultPath, JSON.stringify(finalResult, null, 2));
 console.log("file is saved");
