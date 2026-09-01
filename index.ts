@@ -5,6 +5,7 @@ import { cropperBatch } from "./src/imageExtractor";
 import { convertPdfToImages } from "./src/pdfToImage";
 import { mergeExtractionResults } from "./src/schema/mergeExtraction";
 import { detectAndCropBbs } from "./src/langgraph";
+import { log } from "console";
 
 // ponytail: fixed concurrency; make it adaptive only if OpenRouter starts 425ing
 const CROP_CONCURRENCY = 4;
@@ -40,7 +41,7 @@ if (!fs.existsSync(inputDir)) {
   throw new Error(`Input folder not found: ${inputDir}`);
 }
 
-const pdfFiles = fs
+const pdfFiles: string[] = fs
   .readdirSync(inputDir)
   .filter((f) => f.toLowerCase().endsWith(".pdf"));
 
@@ -54,10 +55,10 @@ if (pdfFiles.length > 1) {
   );
 }
 
-const pdfPath = path.join(inputDir, pdfFiles[0]);
+const pdfPath: string = path.join(inputDir, pdfFiles[0]);
 console.log(`Processing PDF: ${pdfPath}`);
 
-const pages = await convertPdfToImages(pdfPath, outputDir, {
+const pages : string[] = await convertPdfToImages(pdfPath, outputDir, {
   dpi: 300,
 });
 console.log(pages);
@@ -65,6 +66,7 @@ console.log(pages);
 const results = [];
 for (const page of pages) {
   console.log(`Extracting: ${page}`);
+  console.timeLog(`This Page : extraction start: ${page}`)
   const bbsRows = await detectAndCropBbs(page, rowDir);
   console.log(bbsRows);
   const cropResult = await cropperBatch(
