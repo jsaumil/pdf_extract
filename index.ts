@@ -1,10 +1,13 @@
 import path from "path";
 import fs from "fs";
 import { extract } from "./src/extractor";
-import { cropper } from "./src/imageExtractor";
+import { cropperBatch } from "./src/imageExtractor";
 import { convertPdfToImages } from "./src/pdfToImage";
 import { mergeExtractionResults } from "./src/schema/mergeExtraction";
 import { detectAndCropBbs } from "./src/langgraph";
+
+// ponytail: fixed concurrency; make it adaptive only if OpenRouter starts 429ing
+const CROP_CONCURRENCY = 4;
 
 const startTime = performance.now();
 
@@ -41,15 +44,13 @@ const results = [];
 for (const page of pages) {
   console.log(`Extracting: ${page}`);
   const bbsRows = await detectAndCropBbs(page, rowDir);
-  let cropResult = [];
   console.log(bbsRows);
-  if (bbsRows.length > 0) {
-    for (const row of bbsRows) {
-      console.log(`  Cropping BBS row: ${row.path}`);
-      const crop = await cropper(row.path, cropsDir, CROP_PROMPT);
-      cropResult.push(crop);
-    }
-  }
+  const cropResult = await cropperBatch(
+    bbsRows.map((row) => row.path),
+    cropsDir,
+    CROP_PROMPT,
+    CROP_CONCURRENCY,
+  );
   const result = await extract(page, PROMPT, cropResult);
   results.push(result);
 }
