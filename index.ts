@@ -6,7 +6,7 @@ import { convertPdfToImages } from "./src/pdfToImage";
 import { mergeExtractionResults } from "./src/schema/mergeExtraction";
 import { detectAndCropBbs } from "./src/langgraph";
 
-// ponytail: fixed concurrency; make it adaptive only if OpenRouter starts 429ing
+// ponytail: fixed concurrency; make it adaptive only if OpenRouter starts 425ing
 const CROP_CONCURRENCY = 4;
 
 const startTime = performance.now();
@@ -35,7 +35,29 @@ const CROP_PROMPT = fs.readFileSync(
 );
 
 // pdf to image
-const pages = await convertPdfToImages("./input/i1.pdf", outputDir, {
+const inputDir = "./input";
+if (!fs.existsSync(inputDir)) {
+  throw new Error(`Input folder not found: ${inputDir}`);
+}
+
+const pdfFiles = fs
+  .readdirSync(inputDir)
+  .filter((f) => f.toLowerCase().endsWith(".pdf"));
+
+if (pdfFiles.length === 0) {
+  throw new Error(`No PDF files found in ${inputDir}`);
+}
+
+if (pdfFiles.length > 1) {
+  console.warn(
+    `Found ${pdfFiles.length} PDFs in ${inputDir}, processing the first one: ${pdfFiles[0]}`,
+  );
+}
+
+const pdfPath = path.join(inputDir, pdfFiles[0]);
+console.log(`Processing PDF: ${pdfPath}`);
+
+const pages = await convertPdfToImages(pdfPath, outputDir, {
   dpi: 300,
 });
 console.log(pages);
