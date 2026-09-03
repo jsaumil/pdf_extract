@@ -1,14 +1,16 @@
 import { cropBbsRows } from "./src/bbs";
+import { extract } from "./src/extractor";
+import path from "path";
+import fs from "fs";
 
-const imagePath = "output/20260831_055942/page_1.png";
+const imagePath = "output/20260901_084919/page_1.png";
 
 const outputDir = "output/20260831_055942/bbs-crops";
+const PROMPT = fs.readFileSync(
+  path.join(__dirname, "src/prompts", "extract.txt"),
+  "utf-8",
+);
 
-const rows = await cropBbsRows(imagePath, outputDir, {
-  headerRows: 3,
-  debug: true,
-});
-
-console.log(`Total rows: ${rows.length}`);
+const rows = await extract(imagePath, PROMPT, []);
 
 console.log(rows);

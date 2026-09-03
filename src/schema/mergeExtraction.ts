@@ -24,6 +24,10 @@ export function mergeExtractionResults(
       .flatMap((result) => result.plate ?? [])
       .filter((plate): plate is NonNullable<typeof plate> => plate !== null),
 
+    mark: results
+      .flatMap((result) => result.mark ?? [])
+      .filter((mark): mark is NonNullable<typeof mark> => mark !== null),
+
     columns: results
       .flatMap((result) => result.columns ?? [])
       .filter(

@@ -7,12 +7,12 @@ import { tool } from "@langchain/core/tools";
 import { cropAndZoom } from "./tools/zoomTool";
 import { z } from "zod";
 
-import { compressImage, withRetry } from "./utils/api_helpers";
+import { compressImage, withRetry, mapBatched } from "./utils/api_helpers";
 import config from "../config.json";
 import { cropSchema } from "./schema/imageSchema";
 import { normalizeCoords } from "./utils/normalizeCoords";
 
-let maxCropCalls = 40;
+let maxCropCalls = 1;
 
 interface CellCrop {
   column_name: string;
@@ -34,7 +34,7 @@ export interface TableCropResult {
 export async function cropper(
   imagePath: string,
   outputDir: string,
-  prompt: string
+  prompt: string,
 ): Promise<TableCropResult> {
   const b64 = await compressImage(imagePath);
   const cells: CellCrop[] = [];
@@ -184,4 +184,18 @@ export async function cropper(
     cells,
     cropPaths,
   };
+}
+
+export async function cropperBatch(
+  imagePaths: string[],
+  outputDir: string,
+  prompt: string,
+  concurrency = 4,
+): Promise<TableCropResult[]> {
+  return mapBatched(
+    imagePaths,
+    (imagePath) => cropper(imagePath, outputDir, prompt),
+    concurrency,
+    "cropper",
+  );
 }

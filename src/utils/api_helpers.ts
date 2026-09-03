@@ -60,3 +60,35 @@ export async function withRetry<T>(
   }
   throw lastError;
 }
+
+export async function mapBatched<T, R>(
+  items: T[],
+  fn: (item: T, index: number) => Promise<R>,
+  concurrency = 4,
+  label = "batch",
+): Promise<R[]> {
+  const size = Math.max(1, concurrency);
+  const results: R[] = [];
+  for (let start = 0; start < items.length; start += size) {
+    const slice = items.slice(start, start + size);
+    console.log(
+      `${label}: ${start + 1}-${start + slice.length} of ${items.length}`,
+    );
+
+    const settled = await Promise.allSettled(
+      slice.map((item, offset) => fn(item, start + offset)),
+    );
+
+    for (const [offset, outcome] of settled.entries()) {
+      if (outcome.status === "fulfilled") {
+        results.push(outcome.value);
+      } else {
+        console.error(
+          `${label} item ${start + offset + 1} failed: ${outcome.reason?.message ?? outcome.reason}`,
+        );
+      }
+    }
+  }
+
+  return results;
+}

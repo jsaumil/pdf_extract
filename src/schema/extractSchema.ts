@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { column, plate, mark_table } from "./describer";
 
 const dataSchema = z.object({
   bar_mark: z
@@ -11,7 +12,9 @@ const dataSchema = z.object({
     .string()
     .nullable()
     .default(null)
-    .describe("location of the image of bending details — will be injected automatically, leave as null"),
+    .describe(
+      "location of the image of bending details — will be injected automatically, leave as null",
+    ),
   qty: z.coerce
     .number()
     .describe("extract the qty from the table it is the number of qty"),
@@ -22,10 +25,19 @@ const dataSchema = z.object({
     .number()
     .describe("extract the total number of the bar length"),
   data: z
-    .record(z.string(), z.union([z.coerce.number(), z.string()]).nullable())
+    .union([
+      z.record(z.string(), z.union([z.coerce.number(), z.string()]).nullable()),
+      z.string(),
+    ])
     .default({})
     .describe(
-      "Extract dimension values such as A, B, C, C1, C2, D, D1, D2, D3 as numbers. If the item has no bending dimensions (e.g. sleeves, couplers, plates), put a description string instead.",
+      "Extract dimension values such as A, B, C, C1, C2, D, D1, D2, D3 as a record with numeric values. If the item has no bending dimensions (e.g. sleeves, couplers, plates), put a description string instead.",
+    ),
+  kg_per_unit: z.coerce
+    .number()
+    .nullable()
+    .describe(
+      "if table contains in kg/unit only at that time extract that field",
     ),
   total_weigth: z.coerce
     .number()
@@ -63,50 +75,54 @@ const plateSchema = z.object({
     .describe("Extract the total weight of the lug"),
 });
 
+const mark_tableSchema = z.object({
+  mark: z
+    .string()
+    .nullable()
+    .describe("extract the mark name like CSM1, CMS-2, GC-1, IP-1,etc"),
+  description: z
+    .string()
+    .nullable()
+    .describe("extract the description from the table"),
+  qty: z.coerce
+    .number()
+    .nullable()
+    .describe("extract the number of the quantity from the table"),
+});
+
 export const ExtractSchema = z.object({
   project_name: z
     .string()
     .nullable()
-    .default(null)
     .describe("the name of the project it mostly in the information table"),
   structure_consultant: z
     .string()
     .nullable()
-    .default(null)
     .describe("the  name of the consultant of the project"),
-  drawing_no: z.string().nullable().default(null).describe("extract the drawing number"),
+  drawing_no: z.string().nullable().describe("extract the drawing number"),
   date: z
     .string()
     .nullable()
-    .default(null)
     .describe("extract the date from the information table"),
   rev: z
     .string()
     .nullable()
-    .default(null)
     .describe("extract the rev number from the information table"),
   element_name: z
     .string()
     .nullable()
-    .default(null)
     .describe(
       "Extract the structural element name, for example N3C-2-C15, if available",
     ),
-  element_number: z
-    .string()
+  element_number: z.coerce
+    .number()
     .nullable()
-    .default(null)
     .describe(
       "Extract the number of the elements only if explicity given. Do not guess or calculate it",
     ),
-  plate: z
-    .array(plateSchema)
-    .default([])
-    .describe("Extract from the plate table"),
-  columns: z
-    .array(dataSchema)
-    .default([])
-    .describe("Extract from bar or columns table extracted from the table"),
+  plate: z.array(plateSchema).default([]).describe(plate),
+  mark: z.array(mark_tableSchema).default([]).describe(mark_table),
+  columns: z.array(dataSchema).default([]).describe(column),
 });
 
 export type ExtractResult = z.infer<typeof ExtractSchema>;

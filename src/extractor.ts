@@ -1,42 +1,10 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { ChatOpenRouter } from "@langchain/openrouter";
 import { ExtractSchema } from "./schema/extractSchema";
-import type {ExtractResult} from "./schema/extractSchema";
+import type { ExtractResult } from "./schema/extractSchema";
 import { compressImage, withRetry } from "./utils/api_helpers";
 import type { TableCropResult } from "./imageExtractor";
 import config from "../config.json";
-
-// export async function extract(imagePath: string, prompt: string) {
-//   const b64 = await compressImage(imagePath);
-
-//   const model = new ChatOpenRouter({
-//     model: config.EXTRCAT_MODEL,
-//     apiKey: config.OPENROUTER_API_KEY,
-//   });
-
-//   const message = new HumanMessage({
-//     content: [
-//       {
-//         type: "text",
-//         text: prompt,
-//       },
-//       {
-//         type: "image_url",
-//         image_url: {
-//           url: b64,
-//         },
-//       },
-//     ],
-//   });
-
-//   const structuredModel = model.withStructuredOutput(ExtractSchema);
-//   const response = await withRetry(
-//     () => structuredModel.invoke([message]),
-//     "extract",
-//   );
-
-//   return response;
-// }
 
 function normalizeResponse(raw: any): ExtractResult {
   return {
@@ -48,13 +16,14 @@ function normalizeResponse(raw: any): ExtractResult {
     element_name: raw.element_name ?? null,
     element_number: raw.element_number ?? null,
     plate: raw.plate ?? [],
+    mark: raw.mark ?? [],
     columns: raw.columns ?? [],
   };
 }
 
 function attachCropImages(
   result: ExtractResult,
-  cropResult: TableCropResult
+  cropResult: TableCropResult,
 ): ExtractResult {
   const { cells, cropPaths } = cropResult;
 
@@ -73,7 +42,9 @@ function attachCropImages(
     }
   }
 
-  console.log(`[attachCropImages] Crop lookup keys: ${[...cropLookup.keys()].join(", ")}`);
+  console.log(
+    `[attachCropImages] Crop lookup keys: ${[...cropLookup.keys()].join(", ")}`,
+  );
 
   // Attach to each column entry
   for (const col of result.columns) {
@@ -104,9 +75,13 @@ function attachCropImages(
 
     if (match) {
       col.crop_image = match;
-      console.log(`[attachCropImages] Matched bar_mark "${col.bar_mark}" → ${match}`);
+      console.log(
+        `[attachCropImages] Matched bar_mark "${col.bar_mark}" → ${match}`,
+      );
     } else {
-      console.warn(`[attachCropImages] No crop found for bar_mark "${col.bar_mark}"`);
+      console.warn(
+        `[attachCropImages] No crop found for bar_mark "${col.bar_mark}"`,
+      );
     }
   }
 
@@ -116,7 +91,7 @@ function attachCropImages(
 export async function extract(
   imagePath: string,
   prompt: string,
-  cropResults?: TableCropResult[] | null
+  cropResults?: TableCropResult[] | null,
 ) {
   const b64 = await compressImage(imagePath);
 
@@ -143,7 +118,7 @@ export async function extract(
   const structuredModel = model.withStructuredOutput(ExtractSchema);
   const rawResponse = await withRetry(
     () => structuredModel.invoke([message]),
-    "extract"
+    "extract",
   );
 
   const result = normalizeResponse(rawResponse);

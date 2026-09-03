@@ -6,10 +6,13 @@ import fs from "fs";
 
 // Extraction pipeline imports
 import { convertPdfToImages } from "./src/pdfToImage";
+import { cropperBatch } from "./src/imageExtractor";
 import { extract } from "./src/extractor";
 import { mergeExtractionResults } from "./src/schema/mergeExtraction";
 import type { ExtractResult } from "./src/schema/extractSchema";
 import { detectAndCropBbs } from "./src/langgraph";
+
+const CROP_CONCURRENCY = 4;
 
 const JWT_SECRET = process.env.JWT_SECRET || "pdf-extract-secret-key-2024";
 const PORT = 3000;
@@ -42,6 +45,7 @@ function verifyToken(req: Request): any {
 
 async function runExtraction(projectId: number, pdfPath: string) {
   const db = getDB();
+  const startTime = performance.now();
   const timestamp = new Date()
     .toISOString()
     .replace(/[-:]/g, "")
@@ -50,6 +54,8 @@ async function runExtraction(projectId: number, pdfPath: string) {
 
   const outputDir = path.join("output", timestamp);
   fs.mkdirSync(outputDir, { recursive: true });
+  const cropsDir = path.join(outputDir, "crops");
+  fs.mkdirSync(cropsDir, { recursive: true });
   const rowDir = path.join(outputDir, "bbsrow");
   fs.mkdirSync(rowDir, { recursive: true });
 
@@ -64,6 +70,7 @@ async function runExtraction(projectId: number, pdfPath: string) {
 
     const results: ExtractResult[] = [];
     for (let i = 0; i < pages.length; i++) {
+      const pageStartTime = performance.now();
       const page = pages[i];
       console.log(`Processing page ${i + 1}/${pages.length}: ${page}`);
 
@@ -74,24 +81,20 @@ async function runExtraction(projectId: number, pdfPath: string) {
 
       const bbsRows = await detectAndCropBbs(page, rowDir);
 
-      // Pass bending detail crops directly — no LLM cropper needed
-      const cropResults = bbsRows.map((row) => ({
-        imagePath: row.bendingDetailsPath,
-        cells: [
-          {
-            column_name: `row_${row.rowIndex}`,
-            cellType: "data" as const,
-            x1: 0,
-            y1: 0,
-            x2: 1,
-            y2: 1,
-            label: `bbs_row_${row.rowIndex}`,
-          },
-        ],
-        cropPaths: {
-          [`bbs_row_${row.rowIndex}`]: row.bendingDetailsPath,
-        },
-      }));
+      let cropResults: any[] = [];
+      if (bbsRows.length > 0) {
+        db.run(
+          "UPDATE projects SET extraction_progress = ? WHERE id = ?",
+          [`Cropping ${bbsRows.length} BBS rows from page ${i + 1}/${pages.length}...`, projectId]
+        );
+
+        cropResults = await cropperBatch(
+          bbsRows.map((row) => row.path),
+          cropsDir,
+          CROP_PROMPT,
+          CROP_CONCURRENCY,
+        );
+      }
 
       db.run(
         "UPDATE projects SET extraction_progress = ? WHERE id = ?",
@@ -100,6 +103,9 @@ async function runExtraction(projectId: number, pdfPath: string) {
 
       const result = await extract(page, PROMPT, cropResults);
       results.push(result);
+
+      const pageTime = ((performance.now() - pageStartTime) / 1000).toFixed(2);
+      console.log(`Page ${i + 1} done in ${pageTime}s`);
     }
 
     const merged = mergeExtractionResults(results);
@@ -111,12 +117,13 @@ async function runExtraction(projectId: number, pdfPath: string) {
       }
     }
 
-    db.run(
-      "UPDATE projects SET status = 'completed', extraction_progress = 'Done', result = ?, output_path = ? WHERE id = ?",
-      [JSON.stringify(merged), path.join(outputDir, "result.json").replace(/\\/g, "/"), projectId]
-    );
+    const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
+    console.log(`\nExtraction complete for project ${projectId} in ${totalTime}s`);
 
-    console.log(`Extraction complete for project ${projectId}`);
+    db.run(
+      "UPDATE projects SET status = 'completed', extraction_progress = ?, result = ?, output_path = ? WHERE id = ?",
+      [`Done in ${totalTime}s`, JSON.stringify(merged), path.join(outputDir, "result.json").replace(/\\/g, "/"), projectId]
+    );
   } catch (err: any) {
     console.error(`Extraction failed for project ${projectId}:`, err);
     db.run(

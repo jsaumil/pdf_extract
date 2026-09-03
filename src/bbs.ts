@@ -21,7 +21,6 @@ export interface BbsRowCrop {
   height: number;
 
   path: string;
-  bendingDetailsPath: string;
 }
 
 export interface BbsCropOptions {
@@ -114,11 +113,7 @@ function detectTables(
     // 1. RGBA -> GRAY
     // ---------------------------------------------
 
-    cv.cvtColor(
-      image,
-      gray,
-      cv.COLOR_RGBA2GRAY,
-    );
+    cv.cvtColor(image, gray, cv.COLOR_RGBA2GRAY);
 
     // ---------------------------------------------
     // 2. Adaptive threshold
@@ -138,26 +133,14 @@ function detectTables(
     // 3. Horizontal lines
     // ---------------------------------------------
 
-    const horizontalLength = Math.max(
-      30,
-      Math.floor(image.cols / 30),
+    const horizontalLength = Math.max(30, Math.floor(image.cols / 30));
+
+    const horizontalKernel = cv.getStructuringElement(
+      cv.MORPH_RECT,
+      new cv.Size(horizontalLength, 1),
     );
 
-    const horizontalKernel =
-      cv.getStructuringElement(
-        cv.MORPH_RECT,
-        new cv.Size(
-          horizontalLength,
-          1,
-        ),
-      );
-
-    cv.morphologyEx(
-      binary,
-      horizontal,
-      cv.MORPH_OPEN,
-      horizontalKernel,
-    );
+    cv.morphologyEx(binary, horizontal, cv.MORPH_OPEN, horizontalKernel);
 
     horizontalKernel.delete();
 
@@ -165,26 +148,14 @@ function detectTables(
     // 4. Vertical lines
     // ---------------------------------------------
 
-    const verticalLength = Math.max(
-      30,
-      Math.floor(image.rows / 20),
+    const verticalLength = Math.max(30, Math.floor(image.rows / 20));
+
+    const verticalKernel = cv.getStructuringElement(
+      cv.MORPH_RECT,
+      new cv.Size(1, verticalLength),
     );
 
-    const verticalKernel =
-      cv.getStructuringElement(
-        cv.MORPH_RECT,
-        new cv.Size(
-          1,
-          verticalLength,
-        ),
-      );
-
-    cv.morphologyEx(
-      binary,
-      vertical,
-      cv.MORPH_OPEN,
-      verticalKernel,
-    );
+    cv.morphologyEx(binary, vertical, cv.MORPH_OPEN, verticalKernel);
 
     verticalKernel.delete();
 
@@ -192,29 +163,18 @@ function detectTables(
     // 5. Combine lines
     // ---------------------------------------------
 
-    cv.bitwise_or(
-      horizontal,
-      vertical,
-      combined,
-    );
+    cv.bitwise_or(horizontal, vertical, combined);
 
     // ---------------------------------------------
     // 6. Connect table lines
     // ---------------------------------------------
 
-    const connectKernel =
-      cv.getStructuringElement(
-        cv.MORPH_RECT,
-        new cv.Size(3, 3),
-      );
-
-    cv.dilate(
-      combined,
-      dilated,
-      connectKernel,
-      new cv.Point(-1, -1),
-      1,
+    const connectKernel = cv.getStructuringElement(
+      cv.MORPH_RECT,
+      new cv.Size(3, 3),
     );
+
+    cv.dilate(combined, dilated, connectKernel, new cv.Point(-1, -1), 1);
 
     connectKernel.delete();
 
@@ -243,29 +203,17 @@ function detectTables(
     // 8. Examine every contour
     // ---------------------------------------------
 
-    for (
-      let i = 0;
-      i < contours.size();
-      i++
-    ) {
-      const contour =
-        contours.get(i);
+    for (let i = 0; i < contours.size(); i++) {
+      const contour = contours.get(i);
 
       try {
-        const rect =
-          cv.boundingRect(contour);
+        const rect = cv.boundingRect(contour);
 
-        const area =
-          rect.width *
-          rect.height;
+        const area = rect.width * rect.height;
 
-        const widthRatio =
-          rect.width /
-          image.cols;
+        const widthRatio = rect.width / image.cols;
 
-        const heightRatio =
-          rect.height /
-          image.rows;
+        const heightRatio = rect.height / image.rows;
 
         /*
          * Your BBS tables are large.
@@ -277,17 +225,11 @@ function detectTables(
          * - text
          */
 
-        if (
-          widthRatio < 0.20 ||
-          heightRatio < 0.20
-        ) {
+        if (widthRatio < 0.2 || heightRatio < 0.2) {
           continue;
         }
 
-        if (
-          widthRatio > 0.80 ||
-          heightRatio > 0.90
-        ) {
+        if (widthRatio > 0.8 || heightRatio > 0.9) {
           continue;
         }
 
@@ -295,13 +237,9 @@ function detectTables(
         // Calculate horizontal line density
         // -----------------------------------------
 
-        const roiHorizontal =
-          horizontal.roi(rect);
+        const roiHorizontal = horizontal.roi(rect);
 
-        const horizontalPixels =
-          cv.countNonZero(
-            roiHorizontal,
-          );
+        const horizontalPixels = cv.countNonZero(roiHorizontal);
 
         roiHorizontal.delete();
 
@@ -309,37 +247,24 @@ function detectTables(
         // Calculate vertical line density
         // -----------------------------------------
 
-        const roiVertical =
-          vertical.roi(rect);
+        const roiVertical = vertical.roi(rect);
 
-        const verticalPixels =
-          cv.countNonZero(
-            roiVertical,
-          );
+        const verticalPixels = cv.countNonZero(roiVertical);
 
         roiVertical.delete();
 
-        const rectangleArea =
-          rect.width *
-          rect.height;
+        const rectangleArea = rect.width * rect.height;
 
-        const horizontalScore =
-          horizontalPixels /
-          rectangleArea;
+        const horizontalScore = horizontalPixels / rectangleArea;
 
-        const verticalScore =
-          verticalPixels /
-          rectangleArea;
+        const verticalScore = verticalPixels / rectangleArea;
 
         /*
          * A real table should have both
          * horizontal AND vertical lines.
          */
 
-        if (
-          horizontalScore < 0.005 ||
-          verticalScore < 0.001
-        ) {
+        if (horizontalScore < 0.005 || verticalScore < 0.001) {
           continue;
         }
 
@@ -357,28 +282,20 @@ function detectTables(
       }
     }
 
-    console.log(
-      "Table candidates:",
-      candidates,
-    );
+    console.log("Table candidates:", candidates);
 
     // ---------------------------------------------
     // 9. Remove duplicates
     // ---------------------------------------------
 
-    const unique =
-      removeDuplicateTables(
-        candidates,
-      );
+    const unique = removeDuplicateTables(candidates);
 
     // ---------------------------------------------
     // 10. Sort left -> right
     // ---------------------------------------------
 
     unique.sort((a, b) => {
-      if (
-        Math.abs(a.y - b.y) < 50
-      ) {
+      if (Math.abs(a.y - b.y) < 50) {
         return a.x - b.x;
       }
 
@@ -634,25 +551,6 @@ async function cropTableRows(
     console.log(`Horizontal lines:`, lineYs);
     console.log(`Vertical lines:`, lineXs);
 
-    /*
-     * Find the bending details column.
-     *
-     * It is typically the LAST column (rightmost).
-     * We use the last two vertical line X positions
-     * to define the column boundaries.
-     */
-    let bendingColLeft = 0;
-    let bendingColRight = tableImage.info.width;
-
-    if (lineXs.length >= 2) {
-      bendingColLeft = lineXs[lineXs.length - 2];
-      bendingColRight = lineXs[lineXs.length - 1];
-    } else if (lineXs.length === 1) {
-      bendingColLeft = lineXs[0];
-    }
-
-    console.log(`Bending details column: x=${bendingColLeft} to x=${bendingColRight}`);
-
     const crops: BbsRowCrop[] = [];
 
     for (let i = headerRows; i < lineYs.length - 1; i++) {
@@ -692,29 +590,6 @@ async function cropTableRows(
         .png()
         .toFile(outputPath);
 
-      // --- Bending details column crop ---
-      const bendLeft = Math.max(0, table.x + bendingColLeft - rowPadding);
-      const bendRight = Math.min(
-        table.x + bendingColRight + rowPadding,
-        tableImage.info.width + table.x,
-      );
-      const bendWidth = bendRight - bendLeft;
-
-      const bendingFilename = `table_${tableIndex}_row_${String(rowIndex).padStart(3, "0")}_bend.png`;
-      const bendingOutputPath = path.join(outputDir, bendingFilename);
-
-      if (bendWidth > 10) {
-        await sharp(imagePath)
-          .extract({
-            left: bendLeft,
-            top,
-            width: bendWidth,
-            height,
-          })
-          .png()
-          .toFile(bendingOutputPath);
-      }
-
       crops.push({
         tableIndex,
         rowIndex,
@@ -723,13 +598,9 @@ async function cropTableRows(
         width,
         height,
         path: outputPath,
-        bendingDetailsPath: bendWidth > 10 ? bendingOutputPath : outputPath,
       });
 
-      console.log(
-        `  Row ${rowIndex}: ${width}x${height} → ${outputPath}` +
-        ` | bend: ${bendWidth}x${height} → ${bendingOutputPath}`,
-      );
+      console.log(`  Row ${rowIndex}: ${width}x${height} → ${outputPath}`);
     }
 
     return crops;
